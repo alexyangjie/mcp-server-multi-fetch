@@ -1,4 +1,4 @@
-# Fetch MCP Server
+# Multi Fetch MCP Server
 
 A Model Context Protocol server that provides web content fetching capabilities. This server enables LLMs to retrieve and process content from web pages, converting HTML to markdown for easier consumption.
 
