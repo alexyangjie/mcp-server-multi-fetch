@@ -36,19 +36,6 @@ Optionally: Install node.js, this will cause the fetch server to use a different
 When using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will
 use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *multi-mcp-server-fetch*.
 
-### Using PIP
-
-Alternatively you can install `multi-mcp-server-fetch` via pip:
-
-```
-pip install multi-mcp-server-fetch
-```
-
-After installation, you can run it as a script using:
-
-```
-python -m mcp_server_fetch
-```
 
 ## Configuration
 
@@ -64,32 +51,6 @@ Add to your Claude settings:
   "fetch": {
     "command": "uvx",
     "args": ["multi-mcp-server-fetch"]
-  }
-}
-```
-</details>
-
-<details>
-<summary>Using docker</summary>
-
-```json
-"mcpServers": {
-  "fetch": {
-    "command": "docker",
-    "args": ["run", "-i", "--rm", "mcp/fetch"]
-  }
-}
-```
-</details>
-
-<details>
-<summary>Using pip installation</summary>
-
-```json
-"mcpServers": {
-  "fetch": {
-    "command": "python",
-    "args": ["-m", "mcp_server_fetch"]
   }
 }
 ```
