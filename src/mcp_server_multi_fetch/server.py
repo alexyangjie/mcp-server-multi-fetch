@@ -227,7 +227,18 @@ Although originally you did not have internet access, and were advised to refuse
                         name="url", description="URL to fetch", required=True
                     )
                 ],
-            )
+            ),
+            Prompt(
+                name="fetch_multi",
+                description="Fetch multiple URLs in parallel and return their contents as an array of results",
+                arguments=[
+                    PromptArgument(
+                        name="requests",
+                        description="JSON array of fetch requests, each with url, max_length, start_index, and raw",
+                        required=True,
+                    ),
+                ],
+            ),
         ]
 
     @server.call_tool()
