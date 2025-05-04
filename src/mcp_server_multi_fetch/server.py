@@ -18,7 +18,7 @@ from mcp.types import (
     INTERNAL_ERROR,
 )
 from protego import Protego
-from pydantic import BaseModel, Field, AnyUrl, RootModel
+from pydantic import BaseModel, Field, AnyUrl
 import asyncio
 import json
 
@@ -179,8 +179,11 @@ class Fetch(BaseModel):
         ),
     ]
     
-class FetchMulti(RootModel[list[Fetch]]):
+class FetchMulti(BaseModel):
     """Parameters for fetching multiple URLs in parallel."""
+    requests: list[Fetch] = Field(
+        ..., description="List of fetch requests to process in parallel"
+    )
 
 
 async def serve(
@@ -307,7 +310,7 @@ Although originally you did not have internet access, and were advised to refuse
                 except McpError as e:
                     return {"url": url, "error": str(e)}
 
-            tasks = [fetch_single(req) for req in multi.root]
+            tasks = [fetch_single(req) for req in multi.requests]
             results = await asyncio.gather(*tasks)
             return [TextContent(type="text", text=json.dumps(results))]
 
