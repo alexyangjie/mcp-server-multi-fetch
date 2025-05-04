@@ -322,7 +322,7 @@ wheels = [
 ]
 
 [[package]]
-name = "multi-mcp-server-fetch"
+name = "mcp-server-multi-fetch"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

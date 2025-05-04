@@ -34,7 +34,7 @@ Optionally: Install node.js, this will cause the fetch server to use a different
 ### Using uv (recommended)
 
 When using [`uv`](https://docs.astral.sh/uv/) no specific installation is needed. We will
-use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *multi-mcp-server-fetch*.
+use [`uvx`](https://docs.astral.sh/uv/guides/tools/) to directly run *mcp-server-multi-fetch*.
 
 
 ## Configuration
@@ -50,7 +50,7 @@ Add to your Claude settings:
 "mcpServers": {
   "fetch": {
     "command": "uvx",
-    "args": ["multi-mcp-server-fetch"]
+    "args": ["mcp-server-multi-fetch"]
   }
 }
 ```
@@ -85,16 +85,16 @@ The server can be configured to use a proxy by using the `--proxy-url` argument.
 You can use the MCP inspector to debug the server. For uvx installations:
 
 ```
-npx @modelcontextprotocol/inspector uvx multi-mcp-server-fetch
+npx @modelcontextprotocol/inspector uvx mcp-server-multi-fetch
 ```
 
 Or if you've installed the package in a specific directory or are developing on it:
 
 ```
 cd path/to/servers/src/fetch
-npx @modelcontextprotocol/inspector uv run multi-mcp-server-fetch
+npx @modelcontextprotocol/inspector uv run mcp-server-multi-fetch
 ```
 
 ## License
 
-multi-mcp-server-fetch is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.
+mcp-server-multi-fetch is licensed under the MIT License. This means you are free to use, modify, and distribute the software, subject to the terms and conditions of the MIT License. For more details, please see the LICENSE file in the project repository.
