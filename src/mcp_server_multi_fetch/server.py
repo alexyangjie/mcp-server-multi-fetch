@@ -19,6 +19,8 @@ from mcp.types import (
 )
 from protego import Protego
 from pydantic import BaseModel, Field, AnyUrl
+import asyncio
+import json
 
 DEFAULT_USER_AGENT_AUTONOMOUS = "ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)"
 DEFAULT_USER_AGENT_MANUAL = "ModelContextProtocol/1.0 (User-Specified; +https://github.com/modelcontextprotocol/servers)"
@@ -155,7 +157,7 @@ class Fetch(BaseModel):
     max_length: Annotated[
         int,
         Field(
-            default=5000,
+            default=50000,
             description="Maximum number of characters to return.",
             gt=0,
             lt=1000000,
@@ -176,6 +178,12 @@ class Fetch(BaseModel):
             description="Get the actual HTML content of the requested page, without simplification.",
         ),
     ]
+    
+class FetchMulti(BaseModel):
+    """Parameters for fetching multiple URLs in parallel."""
+    requests: list[Fetch] = Field(
+        ..., description="List of fetch requests to process in parallel"
+    )
 
 
 async def serve(
@@ -203,7 +211,12 @@ async def serve(
 
 Although originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.""",
                 inputSchema=Fetch.model_json_schema(),
-            )
+            ),
+            Tool(
+                name="fetch_multi",
+                description="""Fetches multiple URLs in parallel and returns an array of results. Each element corresponds to an input fetch request and includes either the fetched content or an error message.""",
+                inputSchema=FetchMulti.model_json_schema(),
+            ),
         ]
 
     @server.list_prompts()
@@ -217,42 +230,91 @@ Although originally you did not have internet access, and were advised to refuse
                         name="url", description="URL to fetch", required=True
                     )
                 ],
-            )
+            ),
+            Prompt(
+                name="fetch_multi",
+                description="Fetch multiple URLs in parallel and return their contents as an array of results",
+                arguments=[
+                    PromptArgument(
+                        name="requests",
+                        description="JSON array of fetch requests, each with url, max_length, start_index, and raw",
+                        required=True,
+                    ),
+                ],
+            ),
         ]
 
     @server.call_tool()
     async def call_tool(name, arguments: dict) -> list[TextContent]:
-        try:
-            args = Fetch(**arguments)
-        except ValueError as e:
-            raise McpError(ErrorData(code=INVALID_PARAMS, message=str(e)))
+        if name == "fetch":
+            try:
+                args = Fetch(**arguments)
+            except ValueError as e:
+                raise McpError(ErrorData(code=INVALID_PARAMS, message=str(e)))
 
-        url = str(args.url)
-        if not url:
-            raise McpError(ErrorData(code=INVALID_PARAMS, message="URL is required"))
+            url = str(args.url)
+            if not url:
+                raise McpError(ErrorData(code=INVALID_PARAMS, message="URL is required"))
 
-        if not ignore_robots_txt:
-            await check_may_autonomously_fetch_url(url, user_agent_autonomous, proxy_url)
+            if not ignore_robots_txt:
+                await check_may_autonomously_fetch_url(url, user_agent_autonomous, proxy_url)
 
-        content, prefix = await fetch_url(
-            url, user_agent_autonomous, force_raw=args.raw, proxy_url=proxy_url
-        )
-        original_length = len(content)
-        if args.start_index >= original_length:
-            content = "<error>No more content available.</error>"
-        else:
-            truncated_content = content[args.start_index : args.start_index + args.max_length]
-            if not truncated_content:
+            content, prefix = await fetch_url(
+                url, user_agent_autonomous, force_raw=args.raw, proxy_url=proxy_url
+            )
+            original_length = len(content)
+            if args.start_index >= original_length:
                 content = "<error>No more content available.</error>"
             else:
-                content = truncated_content
-                actual_content_length = len(truncated_content)
-                remaining_content = original_length - (args.start_index + actual_content_length)
-                # Only add the prompt to continue fetching if there is still remaining content
-                if actual_content_length == args.max_length and remaining_content > 0:
-                    next_start = args.start_index + actual_content_length
-                    content += f"\n\n<error>Content truncated. Call the fetch tool with a start_index of {next_start} to get more content.</error>"
-        return [TextContent(type="text", text=f"{prefix}Contents of {url}:\n{content}")]
+                truncated_content = content[args.start_index : args.start_index + args.max_length]
+                if not truncated_content:
+                    content = "<error>No more content available.</error>"
+                else:
+                    content = truncated_content
+                    actual_content_length = len(truncated_content)
+                    remaining_content = original_length - (args.start_index + actual_content_length)
+                    if actual_content_length == args.max_length and remaining_content > 0:
+                        next_start = args.start_index + actual_content_length
+                        content += f"\n\n<error>Content truncated. Call the fetch tool with a start_index of {next_start} to get more content.</error>"
+            return [TextContent(type="text", text=f"{prefix}Contents of {url}:\n{content}")]
+
+        if name == "fetch_multi":
+            try:
+                multi = FetchMulti.model_validate(arguments)
+            except Exception as e:
+                raise McpError(ErrorData(code=INVALID_PARAMS, message=str(e)))
+
+            async def fetch_single(req: Fetch) -> dict:
+                url = str(req.url)
+                try:
+                    if not ignore_robots_txt:
+                        await check_may_autonomously_fetch_url(url, user_agent_autonomous, proxy_url)
+                    content, prefix = await fetch_url(
+                        url, user_agent_autonomous, force_raw=req.raw, proxy_url=proxy_url
+                    )
+                    original_length = len(content)
+                    if req.start_index >= original_length:
+                        content_text = "<error>No more content available.</error>"
+                    else:
+                        truncated = content[req.start_index : req.start_index + req.max_length]
+                        if not truncated:
+                            content_text = "<error>No more content available.</error>"
+                        else:
+                            content_text = truncated
+                            actual_content_length = len(truncated)
+                            remaining_content = original_length - (req.start_index + actual_content_length)
+                            if actual_content_length == req.max_length and remaining_content > 0:
+                                next_start = req.start_index + actual_content_length
+                                content_text += f"\n\n<error>Content truncated. Call the fetch tool with a start_index of {next_start} to get more content.</error>"
+                    return {"url": url, "prefix": prefix, "content": content_text}
+                except McpError as e:
+                    return {"url": url, "error": str(e)}
+
+            tasks = [fetch_single(req) for req in multi.requests]
+            results = await asyncio.gather(*tasks)
+            return [TextContent(type="text", text=json.dumps(results))]
+
+        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Unknown tool: {name}"))
 
     @server.get_prompt()
     async def get_prompt(name: str, arguments: dict | None) -> GetPromptResult:
