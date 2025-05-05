@@ -1,7 +1,6 @@
 # Multi Fetch MCP Server
 
-This project is based on the [Fetch MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) by Anthropic
-
+This project is based on the [Fetch MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) by Anthropic.
 
 A Model Context Protocol server that provides web content fetching capabilities. This server enables LLMs to retrieve and process content from web pages, converting HTML to markdown for easier consumption.
 
@@ -11,7 +10,7 @@ The fetch tool will truncate the response, but by using the `start_index` argume
 
  - `fetch` - Fetches a URL from the internet and extracts its contents as markdown.
     - `url` (string, required): URL to fetch
- - `max_length` (integer, optional): Maximum number of characters to return (default: 50000)
+    - `max_length` (integer, optional): Maximum number of characters to return (default: 50000)
     - `start_index` (integer, optional): Start content from this character index (default: 0)
     - `raw` (boolean, optional): Get raw content without markdown conversion (default: false)
  - `fetch_multi` - Fetches multiple URLs concurrently and returns an array of results. Input is an array of objects, each with:
