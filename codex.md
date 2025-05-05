@@ -64,7 +64,7 @@
  ## Notable Conventions & Tips
  - HTTP timeouts: 30s
  - Default persona User-Agent vs. Autonomous UA
- - Chunked fetching via `max_length` (default 5000) and `start_index`
+ - Chunked fetching via `max_length` (default 50000) and `start_index`
  - `McpError` used for controlled error signaling over MCP wire
  - No unit tests included (add as needed)
 
