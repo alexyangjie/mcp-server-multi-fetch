@@ -77,7 +77,17 @@ This can be customized by adding the argument `--user-agent=YourUserAgent` to th
 
 ### Customization - Proxy
 
-The server can be configured to use a proxy by using the `--proxy-url` argument.
+The server supports HTTP(S) and SOCKS5 proxies via the `--proxy-url` argument. For example:
+
+```bash
+# HTTP proxy
+mcp-server-multi-fetch --proxy-url http://192.168.1.1:8080
+
+# SOCKS5 proxy
+mcp-server-multi-fetch --proxy-url socks5://192.168.1.1:8080
+```
+
+Under the hood we use HTTPX, and the SOCKS5 support is available when HTTPX is installed with the `socks` extra (this package now includes it by default).
 
 ## Debugging
 
