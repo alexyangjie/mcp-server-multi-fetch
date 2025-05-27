@@ -21,6 +21,10 @@ from protego import Protego
 from pydantic import BaseModel, Field, AnyUrl
 import asyncio
 import json
+from firecrawl import AsyncFirecrawlApp
+
+# Firecrawl client for scraping URLs
+firecrawl_app = AsyncFirecrawlApp()
 
 DEFAULT_USER_AGENT_AUTONOMOUS = "ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)"
 DEFAULT_USER_AGENT_MANUAL = "ModelContextProtocol/1.0 (User-Specified; +https://github.com/modelcontextprotocol/servers)"
@@ -116,38 +120,34 @@ async def fetch_url(
     """
     Fetch the URL and return the content in a form ready for the LLM, as well as a prefix string with status information.
     """
-    from httpx import AsyncClient, HTTPError
+    # Use Firecrawl SDK to scrape the URL for markdown or raw HTML
+    try:
+        data = await firecrawl_app.scrape_url(
+            url=url,
+            formats=["html"] if force_raw else ["markdown"],
+        )
+    except Exception as e:
+        raise McpError(ErrorData(
+            code=INTERNAL_ERROR,
+            message=f"Failed to fetch {url} via Firecrawl SDK: {e!r}"
+        ))
 
-    async with AsyncClient(proxies=proxy_url) as client:
-        try:
-            response = await client.get(
-                url,
-                follow_redirects=True,
-                headers={"User-Agent": user_agent},
-                timeout=30,
-            )
-        except HTTPError as e:
-            raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Failed to fetch {url}: {e!r}"))
-        if response.status_code >= 400:
+    if force_raw:
+        content = data.get("html", "")
+        if not content:
             raise McpError(ErrorData(
                 code=INTERNAL_ERROR,
-                message=f"Failed to fetch {url} - status code {response.status_code}",
+                message=f"No HTML content returned for {url}"
             ))
-
-        page_raw = response.text
-
-    content_type = response.headers.get("content-type", "")
-    is_page_html = (
-        "<html" in page_raw[:100] or "text/html" in content_type or not content_type
-    )
-
-    if is_page_html and not force_raw:
-        return extract_content_from_html(page_raw), ""
-
-    return (
-        page_raw,
-        f"Content type {content_type} cannot be simplified to markdown, but here is the raw content:\n",
-    )
+        return content, ""
+    else:
+        content = data.get("markdown", "")
+        if not content:
+            raise McpError(ErrorData(
+                code=INTERNAL_ERROR,
+                message=f"No Markdown content returned for {url}"
+            ))
+        return content, ""
 
 
 class Fetch(BaseModel):
@@ -178,7 +178,7 @@ class Fetch(BaseModel):
             description="Get the actual HTML content of the requested page, without simplification.",
         ),
     ]
-    
+
 class FetchMulti(BaseModel):
     """Parameters for fetching multiple URLs in parallel."""
     requests: list[Fetch] = Field(
@@ -207,9 +207,8 @@ async def serve(
         return [
             Tool(
                 name="fetch",
-                description="""Fetches a URL from the internet and optionally extracts its contents as markdown.
-
-Although originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.""",
+                description="""Fetches a single URL from the internet and optionally extracts its contents as markdown.
+This tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.""",
                 inputSchema=Fetch.model_json_schema(),
             ),
             Tool(
@@ -224,7 +223,7 @@ Although originally you did not have internet access, and were advised to refuse
         return [
             Prompt(
                 name="fetch",
-                description="Fetch a URL and extract its contents as markdown",
+                description="Fetch a single URL and extract its contents as markdown",
                 arguments=[
                     PromptArgument(
                         name="url", description="URL to fetch", required=True

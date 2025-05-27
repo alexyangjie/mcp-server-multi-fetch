@@ -1,6 +1,7 @@
 # Multi Fetch MCP Server
 
 This project is based on the [Fetch MCP Server](https://github.com/modelcontextprotocol/servers/tree/main/src/fetch) by Anthropic.
+This fork replaces direct HTTP fetching with the Firecrawl Python SDK. Set up your Firecrawl API key to enable web scraping via Firecrawl.
 
 A Model Context Protocol server that provides web content fetching capabilities. This server enables LLMs to retrieve and process content from web pages, converting HTML to markdown for easier consumption.
 
@@ -27,6 +28,19 @@ The fetch tool will truncate the response, but by using the `start_index` argume
     - `url` (string, required): URL to fetch
 
 ## Installation
+
+Install the Firecrawl SDK and configure your API key before running the server:
+
+```bash
+# Install the MCP server and Firecrawl SDK
+pip install mcp-server-multi-fetch firecrawl-py
+
+# Set your Firecrawl API key (required)
+export FIRECRAWL_API_KEY="fc-YOUR_API_KEY"
+
+# Optionally, override the Firecrawl API endpoint
+export FIRECRAWL_API_URL="https://api.firecrawl.dev"
+```
 
 Optionally: Install node.js, this will cause the fetch server to use a different HTML simplifier that is more robust.
 
@@ -87,7 +101,7 @@ mcp-server-multi-fetch --proxy-url http://192.168.1.1:8080
 mcp-server-multi-fetch --proxy-url socks5://192.168.1.1:8080
 ```
 
-Under the hood we use HTTPX, and the SOCKS5 support is available when HTTPX is installed with the `socks` extra (this package now includes it by default).
+Proxy handling is provided by the Firecrawl Python SDK, which supports HTTP(S) and SOCKS5 proxies configured via the `--proxy-url` flag.
 
 ## Debugging
 
