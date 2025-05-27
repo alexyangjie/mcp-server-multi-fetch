@@ -133,7 +133,7 @@ async def fetch_url(
         ))
 
     if force_raw:
-        content = data.get("html", "")
+        content = data.html or ""
         if not content:
             raise McpError(ErrorData(
                 code=INTERNAL_ERROR,
@@ -141,7 +141,7 @@ async def fetch_url(
             ))
         return content, ""
     else:
-        content = data.get("markdown", "")
+        content = data.markdown or ""
         if not content:
             raise McpError(ErrorData(
                 code=INTERNAL_ERROR,
