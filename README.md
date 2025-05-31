@@ -20,6 +20,9 @@ The fetch tool will truncate the response, but by using the `start_index` argume
     - `start_index` (integer, optional): Start content from this character index (default: 0)
     - `raw` (boolean, optional): Get raw content without markdown conversion (default: false)
 
+- `search` - Searches the web using the Firecrawl search API and scrapes results in markdown and link formats by default.
+    - `query` (string, required): Search query string
+    - `limit` (integer, optional): Maximum number of results to return (default: 10)
 ### Prompts
 
 - **fetch**
@@ -27,6 +30,11 @@ The fetch tool will truncate the response, but by using the `start_index` argume
   - Arguments:
     - `url` (string, required): URL to fetch
 
+- **search**
+  - Search the web using the Firecrawl search API
+  - Arguments:
+    - `query` (string, required): Search query string
+    - `limit` (integer, optional): Maximum number of results to return (default: 10)
 ## Installation
 
 Install the Firecrawl SDK and configure your API key before running the server:

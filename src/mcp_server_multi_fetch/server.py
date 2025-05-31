@@ -185,6 +185,10 @@ class FetchMulti(BaseModel):
         ..., description="List of fetch requests to process in parallel"
     )
 
+class Search(BaseModel):
+    """Parameters for searching using Firecrawl search API."""
+    query: Annotated[str, Field(description="Search query string")]
+    limit: Annotated[int, Field(default=10, description="Maximum number of results to return.", ge=1)]
 
 async def serve(
     custom_user_agent: str | None = None,
@@ -211,11 +215,16 @@ async def serve(
 This tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.""",
                 inputSchema=Fetch.model_json_schema(),
             ),
-            Tool(
-                name="fetch_multi",
-                description="""Fetches multiple URLs in parallel and returns an array of results. Each element corresponds to an input fetch request and includes either the fetched content or an error message.""",
-                inputSchema=FetchMulti.model_json_schema(),
-            ),
+        Tool(
+            name="fetch_multi",
+            description="""Fetches multiple URLs in parallel and returns an array of results. Each element corresponds to an input fetch request and includes either the fetched content or an error message.""",
+            inputSchema=FetchMulti.model_json_schema(),
+        ),
+        Tool(
+            name="search",
+            description="""Searches the web using the Firecrawl search API and scrapes results in markdown and link formats by default.""",
+            inputSchema=Search.model_json_schema(),
+        ),
         ]
 
     @server.list_prompts()
@@ -230,17 +239,25 @@ This tool now grants you internet access. Now you can fetch the most up-to-date 
                     )
                 ],
             ),
-            Prompt(
-                name="fetch_multi",
-                description="Fetch multiple URLs in parallel and return their contents as an array of results",
-                arguments=[
-                    PromptArgument(
-                        name="requests",
-                        description="JSON array of fetch requests, each with url, max_length, start_index, and raw",
-                        required=True,
-                    ),
-                ],
-            ),
+        Prompt(
+            name="fetch_multi",
+            description="Fetch multiple URLs in parallel and return their contents as an array of results",
+            arguments=[
+                PromptArgument(
+                    name="requests",
+                    description="JSON array of fetch requests, each with url, max_length, start_index, and raw",
+                    required=True,
+                ),
+            ],
+        ),
+        Prompt(
+            name="search",
+            description="Search the web using the Firecrawl search API",
+            arguments=[
+                PromptArgument(name="query", description="Search query string", required=True),
+                PromptArgument(name="limit", description="Maximum number of results to return", required=False),
+            ],
+        ),
         ]
 
     @server.call_tool()
@@ -312,6 +329,25 @@ This tool now grants you internet access. Now you can fetch the most up-to-date 
             tasks = [fetch_single(req) for req in multi.requests]
             results = await asyncio.gather(*tasks)
             return [TextContent(type="text", text=json.dumps(results))]
+
+        if name == "search":
+            try:
+                args = Search(**arguments)
+            except ValueError as e:
+                raise McpError(ErrorData(code=INVALID_PARAMS, message=str(e)))
+            try:
+                result = await firecrawl_app.search(
+                    query=args.query,
+                    limit=args.limit,
+                    scrapeOptions={"formats": ["markdown", "links"]},
+                )
+            except Exception as e:
+                raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Failed to search via Firecrawl SDK: {e!r}"))
+            try:
+                json_text = result.model_dump_json()
+            except AttributeError:
+                json_text = json.dumps(result)
+            return [TextContent(type="text", text=json_text)]
 
         raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Unknown tool: {name}"))
 
