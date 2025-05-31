@@ -41,9 +41,13 @@
    - Parses flags: `--user-agent`, `--ignore-robots-txt`, `--proxy-url`
    - Calls `serve()` (async)
  - **Server** (`src/mcp_server_fetch/server.py`):
-   - Registers MCP tools & prompts:
-     - Tool: `fetch` (Pydantic model `Fetch`)
-     - Prompt: `fetch`
+    - Registers MCP tools & prompts:
+    - Tool: `fetch` (Pydantic model `Fetch`)
+    - Prompt: `fetch`
+    - Tool: `fetch_multi` (Pydantic model `FetchMulti`)
+    - Prompt: `fetch_multi`
+    - Tool: `search` (Pydantic model `Search`)
+    - Prompt: `search`
    - Implements:
      - `check_may_autonomously_fetch_url()`: respects robots.txt or raises `McpError`
      - `fetch_url()`: HTTP GET, error handling, choose raw vs. markdown
