@@ -1,4 +1,4 @@
- # Codex
+ # Claude Code
 
  ## Project Overview
  - Name: mcp-server-multi-fetch
