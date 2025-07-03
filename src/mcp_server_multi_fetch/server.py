@@ -21,10 +21,65 @@ from protego import Protego
 from pydantic import BaseModel, Field, AnyUrl
 import asyncio
 import json
+import ssl
 from firecrawl import AsyncFirecrawlApp
+import aiohttp
+
+class CompatibleAsyncFirecrawlApp(AsyncFirecrawlApp):
+    """
+    A wrapper around AsyncFirecrawlApp that handles SSL parameter compatibility
+    issues with newer versions of aiohttp.
+    """
+    
+    async def _async_request(
+            self,
+            method: str,
+            url: str,
+            headers: dict[str, str],
+            data: dict[str, any] | None = None,
+            retries: int = 3,
+            backoff_factor: float = 0.5) -> dict[str, any]:
+        """
+        Override the async request method to use compatible SSL configuration.
+        """
+        # Create SSL context for compatibility
+        ssl_context = ssl.create_default_context()
+        
+        # Use connector with SSL context instead of passing ssl parameter directly
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        
+        async with aiohttp.ClientSession(connector=connector) as session:
+            for attempt in range(retries):
+                try:
+                    async with session.request(
+                        method=method, url=url, headers=headers, json=data
+                    ) as response:
+                        if response.status == 502:
+                            await asyncio.sleep(backoff_factor * (2 ** attempt))
+                            continue
+                        if response.status >= 300:
+                            await self._handle_error(response, f"make {method} request")
+                        return await response.json()
+                except aiohttp.ClientError as e:
+                    if attempt == retries - 1:
+                        raise e
+                    await asyncio.sleep(backoff_factor * (2 ** attempt))
+            raise Exception("Max retries exceeded")
+    
+    async def cancel_crawl_job(self, id: str) -> dict[str, any]:
+        """
+        Override cancel_crawl_job with compatible SSL configuration.
+        """
+        headers = self._prepare_headers()
+        ssl_context = ssl.create_default_context()
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.delete(f'{self.api_url}/v1/crawl/{id}', headers=headers) as response:
+                return await response.json()
 
 # Firecrawl client for scraping URLs
-firecrawl_app = AsyncFirecrawlApp()
+firecrawl_app = CompatibleAsyncFirecrawlApp()
 
 DEFAULT_USER_AGENT_AUTONOMOUS = "ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)"
 DEFAULT_USER_AGENT_MANUAL = "ModelContextProtocol/1.0 (User-Specified; +https://github.com/modelcontextprotocol/servers)"
