@@ -1,5 +1,3 @@
-# __main__.py
-
-from mcp_server_fetch import main
+from mcp_server_multi_fetch import main
 
 main()

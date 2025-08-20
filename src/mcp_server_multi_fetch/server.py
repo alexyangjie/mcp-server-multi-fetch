@@ -177,10 +177,17 @@ async def fetch_url(
     """
     # Use Firecrawl SDK to scrape the URL for markdown or raw HTML
     try:
-        data = await firecrawl_app.scrape_url(
-            url=url,
-            formats=["html"] if force_raw else ["markdown"],
-        )
+        formats = ["html"] if force_raw else ["markdown"]
+        # Backwards compatibility for older Firecrawl SDK versions
+        if hasattr(firecrawl_app, "scrape_url"):
+            # v0.1.x SDKs might take `formats` directly or nested under `params`
+            try:
+                data = await firecrawl_app.scrape_url(url=url, formats=formats)
+            except TypeError:
+                data = await firecrawl_app.scrape_url(url=url, params={"pageOptions": {"formats": formats}})
+        else:
+            # v0.2.x+ SDKs use `scrape` with `page_options`
+            data = await firecrawl_app.scrape(url=url, page_options={"formats": formats})
     except Exception as e:
         raise McpError(ErrorData(
             code=INTERNAL_ERROR,
@@ -188,21 +195,16 @@ async def fetch_url(
         ))
 
     if force_raw:
-        content = data.html or ""
-        if not content:
-            raise McpError(ErrorData(
-                code=INTERNAL_ERROR,
-                message=f"No HTML content returned for {url}"
-            ))
-        return content, ""
+        content = getattr(data, 'html', None) or (data.get("html") if isinstance(data, dict) else "") or ""
     else:
-        content = data.markdown or ""
-        if not content:
-            raise McpError(ErrorData(
-                code=INTERNAL_ERROR,
-                message=f"No Markdown content returned for {url}"
-            ))
-        return content, ""
+        content = getattr(data, 'markdown', None) or (data.get("markdown") if isinstance(data, dict) else "") or ""
+
+    if not content:
+        raise McpError(ErrorData(
+            code=INTERNAL_ERROR,
+            message=f"No {'HTML' if force_raw else 'Markdown'} content returned for {url}"
+        ))
+    return content, ""
 
 
 class Fetch(BaseModel):
@@ -391,11 +393,21 @@ This tool now grants you internet access. Now you can fetch the most up-to-date 
             except ValueError as e:
                 raise McpError(ErrorData(code=INVALID_PARAMS, message=str(e)))
             try:
-                result = await firecrawl_app.search(
-                    query=args.query,
-                    limit=args.limit,
-                    scrapeOptions={"formats": ["markdown", "links"]},
-                )
+                # Backwards compatibility for older Firecrawl SDK versions
+                if hasattr(firecrawl_app, "scrape_url"):
+                    # v0.1.x SDKs
+                    result = await firecrawl_app.search(
+                        query=args.query,
+                        limit=args.limit,
+                        params={"scrapeOptions": {"formats": ["markdown", "links"]}},
+                    )
+                else:
+                    # v0.2.x+ SDKs
+                    result = await firecrawl_app.search(
+                        query=args.query,
+                        limit=args.limit,
+                        scrape_options={"formats": ["markdown", "links"]},
+                    )
             except Exception as e:
                 raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Failed to search via Firecrawl SDK: {e!r}"))
             try:
