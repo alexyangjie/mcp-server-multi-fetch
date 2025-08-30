@@ -1,6 +1,9 @@
-from typing import Annotated, Tuple
+from typing import Annotated, Tuple, Any
 from urllib.parse import urlparse, urlunparse
 
+import os
+import json
+import asyncio
 import markdownify
 import readabilipy.simple_json
 from mcp.shared.exceptions import McpError
@@ -19,67 +22,10 @@ from mcp.types import (
 )
 from protego import Protego
 from pydantic import BaseModel, Field, AnyUrl
-import asyncio
-import json
-import ssl
-from firecrawl import AsyncFirecrawlApp
-import aiohttp
 
-class CompatibleAsyncFirecrawlApp(AsyncFirecrawlApp):
-    """
-    A wrapper around AsyncFirecrawlApp that handles SSL parameter compatibility
-    issues with newer versions of aiohttp.
-    """
-    
-    async def _async_request(
-            self,
-            method: str,
-            url: str,
-            headers: dict[str, str],
-            data: dict[str, any] | None = None,
-            retries: int = 3,
-            backoff_factor: float = 0.5) -> dict[str, any]:
-        """
-        Override the async request method to use compatible SSL configuration.
-        """
-        # Create SSL context for compatibility
-        ssl_context = ssl.create_default_context()
-        
-        # Use connector with SSL context instead of passing ssl parameter directly
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        
-        async with aiohttp.ClientSession(connector=connector) as session:
-            for attempt in range(retries):
-                try:
-                    async with session.request(
-                        method=method, url=url, headers=headers, json=data
-                    ) as response:
-                        if response.status == 502:
-                            await asyncio.sleep(backoff_factor * (2 ** attempt))
-                            continue
-                        if response.status >= 300:
-                            await self._handle_error(response, f"make {method} request")
-                        return await response.json()
-                except aiohttp.ClientError as e:
-                    if attempt == retries - 1:
-                        raise e
-                    await asyncio.sleep(backoff_factor * (2 ** attempt))
-            raise Exception("Max retries exceeded")
-    
-    async def cancel_crawl_job(self, id: str) -> dict[str, any]:
-        """
-        Override cancel_crawl_job with compatible SSL configuration.
-        """
-        headers = self._prepare_headers()
-        ssl_context = ssl.create_default_context()
-        connector = aiohttp.TCPConnector(ssl=ssl_context)
-        
-        async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.delete(f'{self.api_url}/v1/crawl/{id}', headers=headers) as response:
-                return await response.json()
 
-# Firecrawl client for scraping URLs
-firecrawl_app = CompatibleAsyncFirecrawlApp()
+# Firecrawl client (initialised in serve())
+firecrawl_client: Any | None = None
 
 DEFAULT_USER_AGENT_AUTONOMOUS = "ModelContextProtocol/1.0 (Autonomous; +https://github.com/modelcontextprotocol/servers)"
 DEFAULT_USER_AGENT_MANUAL = "ModelContextProtocol/1.0 (User-Specified; +https://github.com/modelcontextprotocol/servers)"
@@ -175,19 +121,13 @@ async def fetch_url(
     """
     Fetch the URL and return the content in a form ready for the LLM, as well as a prefix string with status information.
     """
-    # Use Firecrawl SDK to scrape the URL for markdown or raw HTML
+    # Use Firecrawl (SDK or HTTP) to scrape the URL for markdown or raw HTML
+    if firecrawl_client is None:
+        raise McpError(ErrorData(code=INTERNAL_ERROR, message="Firecrawl client is not initialised"))
     try:
-        formats = ["html"] if force_raw else ["markdown"]
-        # Backwards compatibility for older Firecrawl SDK versions
-        if hasattr(firecrawl_app, "scrape_url"):
-            # v0.1.x SDKs might take `formats` directly or nested under `params`
-            try:
-                data = await firecrawl_app.scrape_url(url=url, formats=formats)
-            except TypeError:
-                data = await firecrawl_app.scrape_url(url=url, params={"pageOptions": {"formats": formats}})
-        else:
-            # v0.2.x+ SDKs use `scrape` with `page_options`
-            data = await firecrawl_app.scrape(url=url, page_options={"formats": formats})
+        formats = ["rawHtml"] if force_raw else ["markdown"]
+        # Firecrawl v2: scrape(url, options?) where options has 'formats'
+        data = await firecrawl_client.scrape(url, options={"formats": formats})
     except Exception as e:
         raise McpError(ErrorData(
             code=INTERNAL_ERROR,
@@ -195,7 +135,11 @@ async def fetch_url(
         ))
 
     if force_raw:
-        content = getattr(data, 'html', None) or (data.get("html") if isinstance(data, dict) else "") or ""
+        # Prefer rawHtml when requested; fall back to html if backend provides only that
+        if isinstance(data, dict):
+            content = data.get("rawHtml") or data.get("html") or ""
+        else:
+            content = getattr(data, 'rawHtml', None) or getattr(data, 'html', None) or ""
     else:
         content = getattr(data, 'markdown', None) or (data.get("markdown") if isinstance(data, dict) else "") or ""
 
@@ -251,6 +195,7 @@ async def serve(
     custom_user_agent: str | None = None,
     ignore_robots_txt: bool = False,
     proxy_url: str | None = None,
+    firecrawl_api_url: str | None = None,
 ) -> None:
     """Run the fetch MCP server.
 
@@ -259,6 +204,22 @@ async def serve(
         ignore_robots_txt: Whether to ignore robots.txt restrictions
         proxy_url: Optional proxy URL to use for requests
     """
+    # Initialise Firecrawl v2 SDK client
+    global firecrawl_client
+    api_key = os.getenv("FIRECRAWL_API_KEY")
+    if not api_key:
+        raise RuntimeError("FIRECRAWL_API_KEY is not set")
+    # Use explicit api_url if provided; otherwise environment or default inside SDK
+    try:
+        from firecrawl import AsyncFirecrawl  # v2 SDK
+    except Exception as e:
+        raise RuntimeError(f"Failed to import Firecrawl v2 SDK: {e}")
+
+    init_kwargs: dict[str, Any] = {"api_key": api_key}
+    if firecrawl_api_url:
+        init_kwargs["api_url"] = firecrawl_api_url
+    firecrawl_client = AsyncFirecrawl(**init_kwargs)
+
     server = Server("mcp-fetch")
     user_agent_autonomous = custom_user_agent or DEFAULT_USER_AGENT_AUTONOMOUS
     user_agent_manual = custom_user_agent or DEFAULT_USER_AGENT_MANUAL
@@ -393,21 +354,13 @@ This tool now grants you internet access. Now you can fetch the most up-to-date 
             except ValueError as e:
                 raise McpError(ErrorData(code=INVALID_PARAMS, message=str(e)))
             try:
-                # Backwards compatibility for older Firecrawl SDK versions
-                if hasattr(firecrawl_app, "scrape_url"):
-                    # v0.1.x SDKs
-                    result = await firecrawl_app.search(
-                        query=args.query,
-                        limit=args.limit,
-                        params={"scrapeOptions": {"formats": ["markdown", "links"]}},
-                    )
-                else:
-                    # v0.2.x+ SDKs
-                    result = await firecrawl_app.search(
-                        query=args.query,
-                        limit=args.limit,
-                        scrape_options={"formats": ["markdown", "links"]},
-                    )
+                if firecrawl_client is None:
+                    raise McpError(ErrorData(code=INTERNAL_ERROR, message="Firecrawl client is not initialised"))
+                # Firecrawl v2: search(query, options?) with limit and scrapeOptions
+                result = await firecrawl_client.search(
+                    args.query,
+                    options={"limit": args.limit, "scrapeOptions": {"formats": ["markdown", "links"]}},
+                )
             except Exception as e:
                 raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Failed to search via Firecrawl SDK: {e!r}"))
             try:

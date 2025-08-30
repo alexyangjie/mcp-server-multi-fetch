@@ -16,9 +16,14 @@ def main():
         help="Ignore robots.txt restrictions",
     )
     parser.add_argument("--proxy-url", type=str, help="Proxy URL to use for requests")
+    parser.add_argument(
+        "--api-url",
+        type=str,
+        help="Firecrawl API base URL (overrides FIRECRAWL_API_URL)",
+    )
 
     args = parser.parse_args()
-    asyncio.run(serve(args.user_agent, args.ignore_robots_txt, args.proxy_url))
+    asyncio.run(serve(args.user_agent, args.ignore_robots_txt, args.proxy_url, args.api_url))
 
 
 if __name__ == "__main__":

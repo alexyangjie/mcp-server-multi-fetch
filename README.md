@@ -46,8 +46,10 @@ pip install mcp-server-multi-fetch firecrawl-py
 # Set your Firecrawl API key (required)
 export FIRECRAWL_API_KEY="fc-YOUR_API_KEY"
 
-# Optionally, override the Firecrawl API endpoint
+# Optionally, override the Firecrawl API endpoint via env or CLI
 export FIRECRAWL_API_URL="https://api.firecrawl.dev"
+# or
+mcp-server-multi-fetch --api-url https://api.firecrawl.dev
 ```
 
 Optionally: Install node.js, this will cause the fetch server to use a different HTML simplifier that is more robust.
@@ -110,6 +112,14 @@ mcp-server-multi-fetch --proxy-url socks5://192.168.1.1:8080
 ```
 
 Proxy handling is provided by the Firecrawl Python SDK, which supports HTTP(S) and SOCKS5 proxies configured via the `--proxy-url` flag.
+
+### Customization - Firecrawl API URL
+
+The SDK endpoint can be overridden without environment variables using `--api-url`:
+
+```bash
+mcp-server-multi-fetch --api-url https://api.firecrawl.dev
+```
 
 ## Debugging
 
