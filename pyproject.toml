@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-multi-fetch"
-version = "0.7.1"
+version = "0.8.0"
 description = "A Model Context Protocol server providing tools to fetch and convert web content for usage by LLMs"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,7 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
 ]
 dependencies = [
-    "firecrawl-py>=1.9.0",
+    "firecrawl-py==1.15.0",
     "httpx[socks]<0.28",
     "markdownify>=0.13.1",
     "mcp>=1.1.3",
