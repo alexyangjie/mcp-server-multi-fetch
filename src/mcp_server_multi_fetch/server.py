@@ -216,8 +216,14 @@ async def serve(
         raise RuntimeError(f"Failed to import Firecrawl v2 SDK: {e}")
 
     init_kwargs: dict[str, Any] = {"api_key": api_key}
-    if firecrawl_api_url:
-        init_kwargs["api_url"] = firecrawl_api_url
+    # Prefer explicit CLI arg; otherwise fall back to environment variable
+    # FIRECRAWL_API_URL. If neither is provided, let the SDK default apply.
+    # Normalise both CLI arg and env var to handle empty/whitespace values
+    cli_api_url = (firecrawl_api_url.strip() if isinstance(firecrawl_api_url, str) else None)
+    env_api_url = os.getenv("FIRECRAWL_API_URL", "").strip() or None
+    api_url_effective = cli_api_url or env_api_url
+    if api_url_effective:
+        init_kwargs["api_url"] = api_url_effective
     firecrawl_client = AsyncFirecrawl(**init_kwargs)
 
     server = Server("mcp-fetch")
